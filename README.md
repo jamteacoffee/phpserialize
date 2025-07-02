@@ -1,40 +1,19 @@
-[![Build Status](https://travis-ci.org/elliotchance/phpserialize.svg?branch=master)](https://travis-ci.org/elliotchance/phpserialize)
-
 PHP [serialize()](http://php.net/manual/en/function.serialize.php) and
 [unserialize()](http://php.net/manual/en/function.unserialize.php) for Go.
+
+This is a fork of github.com/elliotchance/phpserialize with all instances of map[any]any replaced with orderedmap.OrderedMap[any, any].
+
+Since Associated Arrays in PHP are ordered, it is sometimes required to preserve that order when consuming such array.
 
 # Install / Update
 
 ```bash
-go get -u github.com/elliotchance/phpserialize
+go get -u github.com/jamteacoffee/phpserialize
 ```
 
-`phpserialize` requires Go 1.8+.
+`phpserialize` requires Go 1.24+.
 
 # Example
-
-```go
-package main
-
-import (
-	"fmt"
-	"github.com/elliotchance/phpserialize"
-)
-
-func main() {
-	out, err := phpserialize.Marshal(3.2, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(string(out))
-
-	var in float64
-	err = phpserialize.Unmarshal(out, &in)
-
-	fmt.Println(in)
-}
-```
 
 ### Using struct field tags for marshalling
 
@@ -43,29 +22,16 @@ package main
 
 import (
 	"fmt"
-	"github.com/elliotchance/phpserialize"
+	"github.com/elliotchance/orderedmap/v3"
+	"github.com/jamteacoffee/phpserialize"
 )
 
-type MyStruct struct {
-	// Will be marhsalled as my_purpose
-	MyPurpose string `php:"my_purpose"`
-	// Will be marshalled as my_motto, and only if not a nil pointer
-	MyMotto *string `php:"my_motto,omitnilptr"`
-	// Will not be marshalled
-	MySecret string `php:"-"`
-}
-
 func main() {
-	my := MyStruct{
-		MyPurpose: "No purpose",
-		MySecret:  "Has a purpose",
-	}
+	input := []byte("a:2:{s:3:\"bar\";i:20;s:3:\"foo\";i:10;}")
+	result := orderedmap.NewOrderedMap[any, any]()
+	err := phpserialize.Unmarshal(input, &result)
 
-	out, err := phpserialize.Marshal(my, nil)
-	if err != nil {
-		panic(err)
-	}
+	...
 
-	fmt.Println(out)
 }
 ```
