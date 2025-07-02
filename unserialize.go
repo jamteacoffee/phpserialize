@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/elliotchance/orderedmap/v3"
 )
 
 // findByte will return the first position at or after offset of the specified
@@ -104,7 +106,7 @@ func UnmarshalIndexedArray(data []byte) ([]interface{}, error) {
 	return v, err
 }
 
-func UnmarshalAssociativeArray(data []byte) (map[interface{}]interface{}, error) {
+func UnmarshalAssociativeArray(data []byte) (*orderedmap.OrderedMap[any, any], error) {
 	// We may be unmarshalling an object into a map.
 	if checkType(data, 'O', 0) {
 		result, _, err := consumeObjectAsMap(data, 0)
@@ -201,6 +203,24 @@ func Unmarshal(data []byte, v interface{}) error {
 		err := UnmarshalObject(data, value)
 		if err != nil {
 			return err
+		}
+
+		return nil
+	case reflect.Ptr:
+		// If it's a nil pointer, allocate a new value
+		if value.IsNil() {
+			return errors.New("can not unmarshal to nil")
+		} else {
+			if value.Type() == reflect.TypeOf(&orderedmap.OrderedMap[any, any]{}) {
+				v, err := UnmarshalAssociativeArray(data)
+				if err != nil {
+					return err
+				}
+				value.Set(reflect.ValueOf(v))
+			} else {
+				return errors.New("can not unmarshal type: " + value.Elem().Type().Name())
+			}
+
 		}
 
 		return nil

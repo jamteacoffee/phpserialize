@@ -4,6 +4,8 @@ import (
 	"errors"
 	"reflect"
 	"strconv"
+
+	"github.com/elliotchance/orderedmap/v3"
 )
 
 // The internal consume functions work as the parser/lexer when reading
@@ -110,8 +112,8 @@ func consumeBool(data []byte, offset int) (bool, int, error) {
 }
 
 func consumeObjectAsMap(data []byte, offset int) (
-	map[interface{}]interface{}, int, error) {
-	result := map[interface{}]interface{}{}
+	*orderedmap.OrderedMap[any, any], int, error) {
+	result := orderedmap.NewOrderedMap[any, any]()
 
 	// Read the class name. The class name follows the same format as a
 	// string. We could just ignore the length and hope that no class name
@@ -154,14 +156,14 @@ func consumeObjectAsMap(data []byte, offset int) (
 				return nil, -1, err
 			}
 
-			result[key] = subMap
+			result.Set(key, subMap)
 		} else {
 			value, offset, err = consumeNext(data, offset)
 			if err != nil {
 				return nil, -1, err
 			}
 
-			result[key] = value
+			result.Set(key, value)
 		}
 	}
 
@@ -191,7 +193,7 @@ func setField(structFieldValue reflect.Value, value interface{}) error {
 		structFieldValue.SetFloat(val.Float())
 
 	case reflect.Struct:
-		m := val.Interface().(map[interface{}]interface{})
+		m := val.Interface().(*orderedmap.OrderedMap[any, any])
 		fillStruct(structFieldValue, m)
 
 	case reflect.Slice:
@@ -199,7 +201,7 @@ func setField(structFieldValue reflect.Value, value interface{}) error {
 		arrayOfObjects := reflect.MakeSlice(structFieldValue.Type(), l, l)
 
 		for i := 0; i < l; i++ {
-			if m, ok := val.Index(i).Interface().(map[interface{}]interface{}); ok {
+			if m, ok := val.Index(i).Interface().(*orderedmap.OrderedMap[any, any]); ok {
 				obj := arrayOfObjects.Index(i)
 				fillStruct(obj, m)
 			} else {
@@ -228,7 +230,7 @@ func setField(structFieldValue reflect.Value, value interface{}) error {
 }
 
 // https://stackoverflow.com/questions/26744873/converting-map-to-struct
-func fillStruct(obj reflect.Value, m map[interface{}]interface{}) error {
+func fillStruct(obj reflect.Value, m *orderedmap.OrderedMap[any, any]) error {
 	tt := obj.Type()
 	for i := 0; i < obj.NumField(); i++ {
 		field := obj.Field(i)
@@ -243,7 +245,7 @@ func fillStruct(obj reflect.Value, m map[interface{}]interface{}) error {
 		} else {
 			key = lowerCaseFirstLetter(tt.Field(i).Name)
 		}
-		if v, ok := m[key]; ok {
+		if v, ok := m.Get(key); ok {
 			setField(field, v)
 		}
 	}
@@ -305,9 +307,9 @@ func consumeIndexedOrAssociativeArray(data []byte, offset int) (interface{}, int
 	return consumeAssociativeArray(data, originalOffset)
 }
 
-func consumeAssociativeArray(data []byte, offset int) (map[interface{}]interface{}, int, error) {
+func consumeAssociativeArray(data []byte, offset int) (*orderedmap.OrderedMap[any, any], int, error) {
 	if !checkType(data, 'a', offset) {
-		return map[interface{}]interface{}{}, -1, errors.New("not an array")
+		return orderedmap.NewOrderedMap[any, any](), -1, errors.New("not an array")
 	}
 
 	// Skip over the "a:"
@@ -316,25 +318,28 @@ func consumeAssociativeArray(data []byte, offset int) (map[interface{}]interface
 	rawLength, offset := consumeStringUntilByte(data, ':', offset)
 	length, err := strconv.Atoi(rawLength)
 	if err != nil {
-		return map[interface{}]interface{}{}, -1, err
+		return orderedmap.NewOrderedMap[any, any](), -1, err
 	}
 
 	// Skip over the ":{"
 	offset += 2
 
-	result := map[interface{}]interface{}{}
+	result := orderedmap.NewOrderedMap[any, any]()
 	for i := 0; i < length; i++ {
 		var key interface{}
 
 		key, offset, err = consumeNext(data, offset)
 		if err != nil {
-			return map[interface{}]interface{}{}, -1, err
+			return orderedmap.NewOrderedMap[any, any](), -1, err
 		}
 
-		result[key], offset, err = consumeNext(data, offset)
+		var val any
+		val, offset, err = consumeNext(data, offset)
 		if err != nil {
-			return map[interface{}]interface{}{}, -1, err
+			return orderedmap.NewOrderedMap[any, any](), -1, err
 		}
+
+		result.Set(key, val)
 	}
 
 	return result, offset + 1, nil
